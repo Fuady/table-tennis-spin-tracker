@@ -1,0 +1,93 @@
+# ─────────────────────────────────────────────
+# tt-spin-tracker  |  Main Configuration
+# ─────────────────────────────────────────────
+
+project:
+  name: tt-spin-tracker
+  version: "1.0.0"
+  seed: 42
+
+paths:
+  raw_data: data/raw
+  processed_data: data/processed
+  annotations: data/annotations
+  models: models/
+  mlflow_uri: mlruns/
+  logs: logs/
+
+data:
+  video_extensions: [".mp4", ".avi", ".mov", ".mkv"]
+  frame_rate: 30                # target fps to extract
+  resize: [640, 640]            # resize frames for YOLO
+  train_split: 0.75
+  val_split: 0.15
+  test_split: 0.10
+  trajectory_window: 30         # frames per trajectory sequence
+  min_trajectory_length: 10     # min frames to be a valid rally
+
+ingestion:
+  youtube:
+    queries:
+      - "table tennis rally slow motion"
+      - "ping pong topspin training"
+      - "table tennis serve return analysis"
+      - "table tennis backspin loop"
+      - "table tennis match broadcast"
+    max_videos_per_query: 10
+    min_duration_sec: 30
+    max_duration_sec: 600
+    output_format: "mp4"
+    quality: "720"
+  ttnet_dataset_url: "https://drive.google.com/drive/folders/1yjZFP5zFXhUBCHFpwLIMqnWomgcknFkm"
+
+detector:
+  model: "yolov8n.pt"           # start with nano, upgrade to yolov8s for accuracy
+  confidence_threshold: 0.35
+  iou_threshold: 0.45
+  img_size: 640
+  device: "auto"                # auto, cpu, cuda, mps
+  classes: [32]                 # COCO class 32 = sports ball
+  fine_tuned_weights: "models/tt_ball_detector.pt"
+
+tracker:
+  max_age: 10                   # frames to keep lost track
+  min_hits: 3                   # min detections before confirmed track
+  iou_threshold: 0.3
+  max_cosine_distance: 0.4
+
+spin_classifier:
+  model_type: "cnn_lstm"        # cnn_lstm | transformer | mlp_baseline
+  cnn_backbone: "resnet18"
+  lstm_hidden: 256
+  lstm_layers: 2
+  dropout: 0.3
+  num_classes: 4                # topspin, backspin, sidespin, float
+  class_names: ["topspin", "backspin", "sidespin", "float"]
+  sequence_length: 30
+  batch_size: 32
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  early_stopping_patience: 10
+  weights_path: "models/spin_classifier_best.pt"
+
+features:
+  use_trajectory_curvature: true
+  use_velocity_profile: true
+  use_acceleration: true
+  use_optical_flow: true
+  use_ball_appearance: true     # crop patches for CNN branch
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 2
+  max_video_size_mb: 500
+  allowed_extensions: [".mp4", ".avi", ".mov"]
+  cors_origins: ["*"]
+
+dashboard:
+  host: "0.0.0.0"
+  port: 8501
+  refresh_rate_ms: 500
