@@ -1,0 +1,79 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────
+# TT Spin Tracker — Docker Compose Stack
+#
+# Services:
+#   api        — FastAPI inference server (port 8000)
+#   dashboard  — Streamlit analytics dashboard (port 8501)
+#   mlflow     — Experiment tracking UI (port 5000)
+#
+# Usage:
+#   docker-compose up --build
+#   docker-compose up -d           # background
+#   docker-compose logs -f api     # follow logs
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  api:
+    build:
+      context: ../..
+      dockerfile: mlops/docker/Dockerfile
+    image: tt-spin-tracker:latest
+    container_name: tt_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../data:/app/data
+      - ../../models:/app/models
+      - ../../configs:/app/configs
+      - ../../mlruns:/app/mlruns
+    environment:
+      - PYTHONPATH=/app
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - mlflow
+    restart: unless-stopped
+
+  dashboard:
+    image: tt-spin-tracker:latest
+    container_name: tt_dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ../../data:/app/data
+      - ../../models:/app/models
+      - ../../reports:/app/reports
+      - ../../configs:/app/configs
+    environment:
+      - PYTHONPATH=/app
+    command: streamlit run src/api/dashboard.py --server.address 0.0.0.0 --server.port 8501
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  mlflow:
+    image: python:3.10-slim
+    container_name: tt_mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../../mlruns:/mlruns
+    command: >
+      bash -c "pip install mlflow -q &&
+               mlflow server
+               --host 0.0.0.0
+               --port 5000
+               --backend-store-uri /mlruns
+               --default-artifact-root /mlruns"
+    restart: unless-stopped
+
+volumes:
+  mlruns:
